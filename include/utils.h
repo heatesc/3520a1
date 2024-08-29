@@ -1,10 +1,14 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-#define DEBUG (1)
-// source: https://stackoverflow.com/questions/1644868/define-macro-for-debug-printing-in-c
+#include <pthread.h>
+
+#define DEBUG (0)
+// sources:
+// - https://stackoverflow.com/questions/1644868/define-macro-for-debug-printing-in-c
+// - https://www.theurbanpenguin.com/4184-2/
 #define DEBUG_PRINT(fmt, ...) \
-            do { if (DEBUG) fprintf(stderr, fmt, ##__VA_ARGS__); } while (0)
+            do { if (DEBUG) fprintf(stderr, "\033[0;31m"fmt"\033[0m", ##__VA_ARGS__); } while (0)
 
 #define MAX_INT_DIGITS (10)
 
@@ -16,5 +20,19 @@ int get_rand_num(int min, int max);
 
 // returns 0 only if success
 int get_int_from_stdin(int* dest);
+
+/**
+ * Note: mtsafe stands for multi threading safe.
+ *
+ * Note: when writing this function, I needed to learn how to
+ * pass a format string as an argument. I learnt this from
+ * stackoverflow:
+ * https://stackoverflow.com/questions/68154231/how-do-i-define-a-function-that-accepts-a-formatted-input-string-in-c
+ * 
+ * @param can_print_mut 
+ * @param str 
+ * @param ... 
+ */
+void mtsafe_printf(pthread_mutex_t* can_print_mut, char* str, ...);
 
 #endif // UTILS_H

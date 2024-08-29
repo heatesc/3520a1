@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <pthread.h>
 #include <malloc.h>
+#include <signal.h>
 #include <unistd.h>
 #include <stdbool.h>
 
@@ -12,9 +13,9 @@
 
 typedef struct
 {
-    // things a student thread needs to know:
     int student_id;
     int assigned_lab;
+    pthread_mutex_t* print_mut;
     int assigned_group;
     int* group_sizes;
     pthread_mutex_t* student_counter_mut;
@@ -41,6 +42,9 @@ typedef struct
     int* students_gone_counter;
     pthread_mutex_t students_gone_counter_mut;
     pthread_cond_t* students_gone_cond;
+    pthread_cond_t* lab_complete_conds;
+    bool* lab_complete_flags;
+    pthread_mutex_t* lab_complete_flag_muts;
 } student_args;
 
 typedef struct
@@ -49,10 +53,11 @@ typedef struct
     int* group_sizes;
     pthread_mutex_t* avail_lab_queue_mut;
     ring_buf* avail_lab_queue;
+    pthread_mutex_t* print_mut;
     int entering_group;
     pthread_mutex_t entering_group_mut;
     pthread_cond_t entering_group_assigned;
-    pthread_cond_t* lab_is_avail_cond;
+    pthread_cond_t* avail_lab_queue_not_empty;
     bool* running;
     pthread_cond_t* group_assigned_to_lab_cond;
     // entry i of 'lab_assignments' is the lab_id of the lab assigned to 
@@ -60,18 +65,30 @@ typedef struct
     int* lab_assignments;
     pthread_mutex_t* lab_assignments_mut;
     pthread_cond_t* all_students_present;
-    pthread_mutex_t* all_students_present_muts;
+    pthread_mutex_t* lab_attendance_counter_muts;
     int lab_attendance_counter;
     int lab_attendance_counter_mut;
     int T;
     int* group_capacities;
     int* students_gone_counter;
     pthread_mutex_t* students_gone_counter_mut;
+    bool* tutors_can_go_home;
+    pthread_mutex_t* tutors_can_go_home_mut;
+    pthread_cond_t* tutors_can_go_home_cond;
+    int N;
+    pthread_cond_t* lab_complete_conds;
+    bool* lab_complete_flags;
+    pthread_mutex_t* lab_complete_flag_muts;
+    int* tutors_gone_counter;
+    pthread_mutex_t* tutors_gone_counter_mut;
+    pthread_cond_t* tutors_gone_cond;
+    int K;
 } tutor_args;
 
 typedef struct
 {
     int* group_sizes;
+    pthread_mutex_t* print_mut;
     pthread_cond_t* lab_is_avail_cond;
     pthread_cond_t* all_students_arrived;
     pthread_mutex_t* student_counter_mut;
@@ -94,28 +111,45 @@ typedef struct
     int* students_gone_counter;
     int K;
     pthread_cond_t* tutor_done_cond;
+    bool* tutors_can_go_home;
+    pthread_mutex_t* tutors_can_go_home_mut;
+    pthread_cond_t* tutors_can_go_home_cond;
+    int* tutors_gone_counter;
+    pthread_mutex_t* tutors_gone_counter_mut;
+    pthread_cond_t* tutors_gone_cond;
 } teacher_args;
+
+static int num_students_left(pthread_mutex_t* mut, int* source)
+{
+    pthread_mutex_lock(mut);
+    const int ret = *source;
+    pthread_mutex_unlock(mut);
+    return ret;
+}
 
 void* tutor(void* args)
 {
     tutor_args* tut_args = (tutor_args*)args;
-    
-    while (*(tut_args->running))
+
+    int students_gone = num_students_left(tut_args->students_gone_counter_mut, tut_args->students_gone_counter);
+    while (students_gone < tut_args->N)
     {
-        tut_args->entering_group = GROUP_UNASSIGNED; 
+        /* reset lab session variables */
+
+        tut_args->entering_group = GROUP_UNASSIGNED;
+        tut_args->lab_complete_flags[tut_args->id] = false;
         
         /* join the available tutor/lab queue */
 
         pthread_mutex_lock(tut_args->avail_lab_queue_mut);
+        mtsafe_printf(tut_args->print_mut, "Tutor %d: The lab room %d is vacated and ready for one "
+               " group\n", tut_args->id, tut_args->id);
         ring_buf_add(tut_args->avail_lab_queue, tut_args->id);
         pthread_mutex_unlock(tut_args->avail_lab_queue_mut);
         
-        printf("Tutor %d: The lab room %d is vacated and ready for one "
-               " group\n", tut_args->id, tut_args->id);
-        fflush(stdout);
         /* signal to the teacher that the available lab queue isn't empty */
 
-        pthread_cond_signal(tut_args->lab_is_avail_cond);
+        pthread_cond_signal(tut_args->avail_lab_queue_not_empty);
         
         /* wait to be assigned a group */
         
@@ -129,22 +163,50 @@ void* tutor(void* args)
         /*  wait till the whole group has entered the lab */
 
         pthread_mutex_lock(
-                &tut_args->all_students_present_muts[tut_args->entering_group]);
+                &tut_args->lab_attendance_counter_muts[tut_args->entering_group]);
         while (tut_args->lab_attendance_counter < 
             tut_args->group_sizes[tut_args->entering_group])
-            pthread_cond_wait(tut_args->all_students_present, &tut_args->all_students_present_muts[tut_args->entering_group]);
+            pthread_cond_wait(tut_args->all_students_present, &tut_args->lab_attendance_counter_muts[tut_args->entering_group]);
         pthread_mutex_unlock(
-                &tut_args->all_students_present_muts[tut_args->entering_group]);
-        printf("Tutor %d: All students in group %d have entered the lab room"
+                &tut_args->lab_attendance_counter_muts[tut_args->entering_group]);
+        mtsafe_printf(tut_args->print_mut, "Tutor %d: All students in group %d have entered the lab room"
                " %d now.\n", tut_args->id, tut_args->entering_group, 
                tut_args->id);
+
+        /* simulate lab time */
+        
         int exercise_duration = get_rand_num(tut_args->T/2, tut_args->T);
         sleep(exercise_duration);
-        printf("Tutor %d: students in group %d have completed the lab exercise"
+        mtsafe_printf(tut_args->print_mut, "Tutor %d: students in group %d have completed the lab exercise"
                " in %d units of time. You may leave this room now.\n",
                tut_args->id, tut_args->entering_group, exercise_duration);
+
+        /* update lab complete flag and broadcast, so students know lab is complete */
+        
+        tut_args->lab_complete_flags[tut_args->id] = true;
+        pthread_cond_broadcast(tut_args->lab_complete_conds + tut_args->id);
+
+        /* wait for teacher to allow going home */
+
+        pthread_mutex_unlock(tut_args->tutors_can_go_home_mut);
+        while (!(*tut_args->tutors_can_go_home))
+            pthread_cond_wait(tut_args->tutors_can_go_home_cond, tut_args->tutors_can_go_home_mut);
+        pthread_mutex_unlock(tut_args->tutors_can_go_home_mut);
+        
+        students_gone = num_students_left(tut_args->students_gone_counter_mut, tut_args->students_gone_counter);
     }
+
+    /* update tutors gone counter, signal teacher if all tutors gone */
+
+    bool signal_teacher = false;
+    pthread_mutex_lock(tut_args->tutors_gone_counter_mut);
+    (*tut_args->tutors_gone_counter)++;
+    signal_teacher = *tut_args->tutors_gone_counter == tut_args->K; 
+    pthread_mutex_unlock(tut_args->tutors_gone_counter_mut);
     
+    mtsafe_printf(tut_args->print_mut, "Tutor %d: Thanks teacher. Bye!\n", tut_args->id);
+
+    if (signal_teacher) pthread_cond_signal(tut_args->tutors_gone_cond);
     
     return NULL;
 }
@@ -155,11 +217,8 @@ void* teacher(void* args)
     printf("Teacher: I'm waiting for all the students to arrive.\n");
     pthread_mutex_lock(targs->student_counter_mut);
     while (*targs->student_counter < targs->N)
-    {
-        printf("i ran\n");
         pthread_cond_wait(targs->all_students_arrived, 
                           targs->student_counter_mut);
-    }
     pthread_mutex_unlock(targs->student_counter_mut);
     printf("Teacher: All students have arrived. I start to assign group ids"
            " to students.\n"); 
@@ -192,7 +251,7 @@ void* teacher(void* args)
         targs->student_args_arr[i].assigned_group = new_group;
         pthread_cond_signal(&targs->student_args_arr[i].assigned_group_cond);
         pthread_mutex_unlock(&targs->student_args_arr[i].assigned_lab_mut);
-        printf("Teacher: student %d is in group %d.\n", i, new_group);
+        mtsafe_printf(targs->print_mut, "Teacher: student %d is in group %d.\n", i, new_group);
         stud_left_to_fill_group[new_group]--;
     }
     
@@ -213,6 +272,10 @@ void* teacher(void* args)
         
         pthread_mutex_unlock(targs->avail_lab_queue_mut);
 
+        mtsafe_printf(targs->print_mut, "Teacher: The lab %d is now available. Students in group %d can"
+               " enter the room and start your lab exercise.\n", avail_lab,
+               targs->lab_assignments[group]);
+        
         pthread_mutex_lock(&targs->tutor_args_arr[avail_lab]
             .entering_group_mut);
         targs->tutor_args_arr[avail_lab].entering_group = group;
@@ -224,31 +287,35 @@ void* teacher(void* args)
         
         /* assign the retrieved available tutor to the current group */
         
-        printf("Teacher: The lab %d is now available. Students in group %d can"
-               " enter the room and start your lab exercise.\n", avail_lab,
-               targs->lab_assignments[group]);
+        
         pthread_mutex_lock(targs->lab_assignments_mut);
         targs->lab_assignments[group] = avail_lab;
         // wake up students threads of the current lab
-        pthread_cond_broadcast(&targs->group_assigned_to_lab_conds[group]);
         pthread_mutex_unlock(targs->lab_assignments_mut);
-        
-        pthread_mutex_lock(targs->students_gone_counter_mut);
+        pthread_cond_broadcast(&targs->group_assigned_to_lab_conds[group]);
+    }
+    
+    pthread_mutex_lock(targs->students_gone_counter_mut);
         while (*(targs->students_gone_counter) < targs->N)
             pthread_cond_wait(targs->students_gone_cond, 
                               targs->student_counter_mut);
         pthread_mutex_unlock(targs->students_gone_counter_mut);
-        pthread_mutex_lock(targs->running_mut);
-        *targs->running = false;
-        for (int tutor = 0; tutor < targs->K; tutor++) 
-            printf("Teacher: there are no students waiting. Tutor %d, you can"
-                   " go home now.\n", tutor);
-        pthread_cond_signal(targs->tutor_done_cond);
-        pthread_mutex_unlock(targs->running_mut);
-        
-        printf("Teacher: All students and tutors are left. I can now go home"
-               ".\n");
-    }
+    for (int tutor = 0; tutor < targs->K; tutor++) 
+        mtsafe_printf(targs->print_mut, "Teacher: there are no students waiting. Tutor %d, you can"
+               " go home now.\n", tutor);
+    *(targs->tutors_can_go_home) = true;
+    pthread_cond_broadcast(targs->tutors_can_go_home_cond);
+
+
+    /* wait for all tutors to go */
+
+    pthread_mutex_lock(targs->tutors_gone_counter_mut);
+    while (*targs->tutors_gone_counter < targs->K)
+        pthread_cond_wait(targs->tutors_gone_cond, targs->tutors_gone_counter_mut);
+    pthread_mutex_unlock(targs->tutors_gone_counter_mut);
+    
+    mtsafe_printf(targs->print_mut, "Teacher: All students and tutors are left. I can now go home"
+           ".\n");
     
     /* free resources */
     
@@ -260,8 +327,9 @@ void* teacher(void* args)
 void* student(void* args)
 {
     student_args* sargs = (student_args*)args;
-    
-    
+
+    printf("Student %d: I have arrived and wait for being assigned to a group."
+           "\n", sargs->student_id);
     
     /* increment the shared student_counter variable */
     
@@ -273,25 +341,30 @@ void* student(void* args)
     if (sargs->N == *sargs->student_counter)
         pthread_cond_signal(sargs->all_students_arrived);
     
-    printf("Student %d: I have arrived and wait for being assigned to a group."
-           "\n", sargs->student_id);
+    
     
     pthread_mutex_lock(&sargs->assigned_group_mut);
     while (GROUP_UNASSIGNED == sargs->assigned_group)
         pthread_cond_wait(&sargs->assigned_group_cond, 
                           &sargs->assigned_group_mut);
-    printf("Student %d: OK, I'm in group %d and waiting for my turn to enter a "
-           "lab room\n", sargs->student_id, sargs->assigned_group);
+    
     pthread_mutex_unlock(&sargs->assigned_group_mut);
     
     pthread_mutex_lock(&sargs->assigned_lab_mut);
     while (LAB_UNASSIGNED == sargs->assigned_lab)
-        pthread_cond_wait(&sargs->assigned_group_cond, 
+    {
+        mtsafe_printf(sargs->print_mut, "Student %d: OK, I'm in group %d and waiting for my turn to enter a "
+           "lab room\n", sargs->student_id, sargs->assigned_group);
+        pthread_cond_wait(&sargs->assigned_lab_cond, 
                           &sargs->assigned_lab_mut);
+    }
     pthread_mutex_unlock(&sargs->assigned_lab_mut);
-    printf("Student %d in group %d: My group is called. I will enter the lab"
+    
+    mtsafe_printf(sargs->print_mut, "Student %d in group %d: My group is called. I will enter the lab"
            " room %d\n", sargs->student_id, sargs->assigned_group, 
            sargs->assigned_lab);
+
+    
     pthread_mutex_lock(
             &sargs->lab_attendance_counter_mut[sargs->assigned_group]);
     sargs->lab_attendance_counter++;
@@ -300,14 +373,30 @@ void* student(void* args)
                 &sargs->all_students_present_conds[sargs->assigned_group]);
     pthread_mutex_unlock(
             &sargs->lab_attendance_counter_mut[sargs->assigned_group]);
-    printf("Student %d in group %d: Thanks Tutor %d. Bye!\n", sargs->student_id, 
+    
+    /* wait for the tutor to broadcast that the lab is completed */
+
+    pthread_mutex_lock(&sargs->lab_complete_flag_muts[sargs->assigned_lab]);
+    while (!sargs->lab_complete_flags[sargs->assigned_lab])
+        pthread_cond_wait(sargs->lab_complete_conds + sargs->assigned_lab,
+            &sargs->lab_complete_flag_muts[sargs->assigned_lab]);
+    pthread_mutex_unlock(&sargs->lab_complete_flag_muts[sargs->assigned_lab]);
+    
+    printf("Student %d in group %d: Thanks Tutor %d. Bye!\n", sargs->student_id,
            sargs->assigned_group, 
            sargs->lab_assignments[sargs->assigned_group]);
+    
+    /* update the shared students gone counter */
+
     pthread_mutex_lock(&sargs->students_gone_counter_mut);
     (*sargs->students_gone_counter)++;
     pthread_mutex_unlock(&sargs->students_gone_counter_mut);
+
+    /* inform the teacher if this is the last student */
+    
     if ((*sargs->students_gone_counter >= sargs->N))
         pthread_cond_signal(sargs->students_gone_cond);
+    
     return NULL;
 }
 
@@ -342,6 +431,13 @@ int main()
 
     /* misc synchronisation variables */
 
+    // only the thread that locks the print_mut may print (excluding the main thread)
+    pthread_mutex_t print_mut;
+    pthread_cond_t* lab_complete_conds = malloc(sizeof(pthread_cond_t) * K);
+    for (int i = 0; i < K; i++)
+        pthread_cond_init(lab_complete_conds + i, NULL);
+    
+    pthread_mutex_init(&print_mut, NULL);
     pthread_mutex_t avail_lab_queue_mut;
     pthread_mutex_init(&avail_lab_queue_mut, NULL);
     pthread_mutex_t* all_students_present_muts = malloc(
@@ -371,6 +467,20 @@ int main()
     int* group_sizes = malloc(sizeof(int) * M);
     pthread_cond_t tutor_done_cond;
     pthread_cond_init(&tutor_done_cond, NULL);
+    pthread_mutex_t* lab_complete_flag_muts = malloc(sizeof(pthread_mutex_t) * K);
+    for (int i = 0; i < K; i++)
+        pthread_mutex_init(lab_complete_flag_muts + i, NULL);
+    bool* lab_complete_flags = calloc(K, sizeof(bool));
+    bool tutors_can_go_home = false;
+    pthread_mutex_t tutors_can_go_home_mut;
+    pthread_mutex_init(&tutors_can_go_home_mut, NULL);
+    pthread_cond_t tutors_can_go_home_cond;
+    pthread_cond_init(&tutors_can_go_home_cond, NULL);
+    int tutors_gone_counter = 0;
+    pthread_mutex_t tutors_gone_counter_mut;
+    pthread_mutex_init(&tutors_gone_counter_mut, NULL);
+    pthread_cond_t tutors_gone_cond;
+    pthread_cond_init(&tutors_gone_cond, NULL);
     
     /* create student thread args */
     
@@ -401,9 +511,12 @@ int main()
         student_args_arr[i].lab_assignments = lab_assignments;
         student_args_arr[i].students_gone_counter = &students_gone_counter;
         student_args_arr[i].students_gone_cond = &students_gone_cond;
+        student_args_arr[i].print_mut = &print_mut;
+        student_args_arr[i].lab_complete_flags = lab_complete_flags;
+        student_args_arr[i].lab_complete_flag_muts = lab_complete_flag_muts;
+        student_args_arr[i].lab_complete_conds = lab_complete_conds;
     }
     
-
     
     /* create tutor thread args */
     
@@ -413,14 +526,28 @@ int main()
         tut_args[i].entering_group = GROUP_UNASSIGNED;
         tut_args[i].id = i;
         pthread_mutex_init(&tut_args->entering_group_mut, NULL);
-        tut_args[i].all_students_present_muts = all_students_present_muts;
+        tut_args[i].lab_attendance_counter_muts = all_students_present_muts;
         tut_args[i].avail_lab_queue_mut = &avail_lab_queue_mut;
         tut_args[i].avail_lab_queue = lab_avail_queue;
         pthread_cond_init(&tut_args->entering_group_assigned, NULL);
         tut_args[i].T = T;
         tut_args[i].running = &running;
-        tut_args[i].lab_is_avail_cond = &lab_is_avail_cond;
+        tut_args[i].avail_lab_queue_not_empty = &lab_is_avail_cond;
         tut_args[i].group_sizes = group_sizes;
+        tut_args[i].N = N;
+        tut_args[i].students_gone_counter = &students_gone_counter;
+        tut_args[i].students_gone_counter_mut = &students_gone_counter_mut;
+        tut_args[i].print_mut = &print_mut;
+        tut_args[i].lab_complete_flag_muts = lab_complete_flag_muts;
+        tut_args[i].lab_complete_flags = lab_complete_flags;
+        tut_args[i].lab_complete_conds = lab_complete_conds;
+        tut_args[i].tutors_can_go_home = &tutors_can_go_home;
+        tut_args[i].tutors_can_go_home_mut = &tutors_can_go_home_mut;
+        tut_args[i].tutors_can_go_home_cond = &tutors_can_go_home_cond;
+        tut_args[i].tutors_gone_counter = &tutors_gone_counter;
+        tut_args[i].tutors_gone_counter_mut = &tutors_gone_counter_mut;
+        tut_args[i].tutors_gone_cond = &tutors_gone_cond;
+        tut_args[i].K = K;
     }
 
     /* create teacher thread args and launch teacher thread */
@@ -431,6 +558,7 @@ int main()
     targs->student_args_arr = student_args_arr;
     targs->N = N;
     targs->M = M;
+    targs->K = K;
     targs->avail_lab_queue = lab_avail_queue;
     targs->avail_lab_queue_mut = &avail_lab_queue_mut;
     targs->running = &running;
@@ -446,7 +574,15 @@ int main()
     targs->students_gone_counter_mut = &students_gone_counter_mut;
     targs->students_gone_counter = &students_gone_counter;
     targs->group_sizes = group_sizes;
+    targs->students_gone_cond = &students_gone_cond;
     targs->tutor_done_cond = &tutor_done_cond;
+    targs->print_mut = &print_mut;
+    targs->tutors_can_go_home = &tutors_can_go_home;
+    targs->tutors_can_go_home_mut = &tutors_can_go_home_mut;
+    targs->tutors_can_go_home_cond = &tutors_can_go_home_cond;
+    targs->tutors_gone_counter = &tutors_gone_counter;
+    targs->tutors_gone_counter_mut = &tutors_gone_counter_mut;
+    targs->tutors_gone_cond = &tutors_gone_cond;
     
     /* launch student threads */
     
@@ -465,11 +601,7 @@ int main()
     for (int i = 0; i < N; i++)
         pthread_join(student_threads[i], NULL);
     for (int i = 0; i < K; i++)
-    {
-        pthread_cancel(tutor_threads[i]);
         pthread_join(tutor_threads[i], NULL);
-    }
-    pthread_cancel(teacher_thread);
     pthread_join(teacher_thread, NULL);
     
     /* free resources */
@@ -490,5 +622,9 @@ int main()
     free(all_students_present_muts);
     free(all_students_present_conds);
     free(tutor_threads);
+    for (int i = 0; i < K; i++)
+        pthread_cond_destroy(lab_complete_conds + i);
+    free(lab_complete_conds);
+    free(lab_complete_flags);
     return 0;
 }
