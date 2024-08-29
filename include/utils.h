@@ -1,14 +1,25 @@
 #ifndef UTILS_H
 #define UTILS_H
-
 #include <pthread.h>
 
+// DEBUG being set to 1 activates debug functionality, e.g. DEBUG_PRINT.
 #define DEBUG (0)
 // sources:
 // - https://stackoverflow.com/questions/1644868/define-macro-for-debug-printing-in-c
 // - https://www.theurbanpenguin.com/4184-2/
+// note: debug ou
 #define DEBUG_PRINT(fmt, ...) \
             do { if (DEBUG) fprintf(stderr, "\033[0;31m"fmt"\033[0m", ##__VA_ARGS__); } while (0)
+
+/*
+ * When the program is in test mode, threads will log numbers to a file.
+ * These numbers will be used by "validator.py" to determine whether
+ * the program has executed correctly. For more information, see the
+ * testing-related portion of part 2 of this assignment.
+ */
+#define TEST_MODE (1)
+#define TEST_MODE_LOG_FILE "test_log.txt"
+// #define TEST_LOG(x) if (TEST_MODE) test_log(x);
 
 #define MAX_INT_DIGITS (10)
 
