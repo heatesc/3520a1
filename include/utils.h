@@ -3,14 +3,14 @@
 #include <pthread.h>
 
 // DEBUG being set to 1 activates debug functionality, e.g. DEBUG_PRINT.
-#define DEBUG (0)
+#define DEBUG (1)
 // sources:
 // - https://stackoverflow.com/questions/1644868/define-macro-for-debug-printing-in-c
 // - https://www.theurbanpenguin.com/4184-2/
 // note: debug ou
 #define DEBUG_PRINT(fmt, ...) \
             do { if (DEBUG) fprintf(stderr, "\033[0;31m"fmt"\033[0m", ##__VA_ARGS__); } while (0)
-
+            
 /*
  * When the program is in test mode, threads will log numbers to a file.
  * These numbers will be used by "validator.py" to determine whether
