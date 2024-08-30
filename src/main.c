@@ -380,14 +380,12 @@ void* student(void* args)
            sargs->lab_assignments[sargs->assigned_group]);
 
     bool signal_all_stud_present = false;
-    pthread_mutex_lock(
-            &sargs->lab_attendance_counter_mut[sargs->assigned_group]);
+    pthread_mutex_lock(&sargs->lab_attendance_counter_mut[sargs->assigned_group]);
     sargs->lab_attendance_counter[sargs->lab_assignments[sargs->assigned_group]]++;
     signal_all_stud_present = sargs->lab_attendance_counter[sargs->lab_assignments[sargs->assigned_group]] >= sargs->group_sizes[sargs->assigned_group];
     pthread_mutex_unlock(&sargs->lab_attendance_counter_mut[sargs->assigned_group]);
     if (signal_all_stud_present)
     {
-        sleep(1);
         pthread_cond_signal(&sargs->all_students_present_conds[sargs->assigned_group]);
     }
 
