@@ -3,7 +3,7 @@
 #include <pthread.h>
 
 // DEBUG being set to 1 activates debug functionality, e.g. DEBUG_PRINT.
-#define DEBUG (1)
+#define DEBUG (0)
 // sources:
 // - https://stackoverflow.com/questions/1644868/define-macro-for-debug-printing-in-c
 // - https://www.theurbanpenguin.com/4184-2/
