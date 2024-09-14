@@ -1,0 +1,56 @@
+test_1
+    1 of everything
+    
+test_2
+    - 2 students
+    - 1 group
+    - 1 tutor
+    - 1 time limit
+    
+test_3
+    - 8 students
+    - 1 group
+    - 1 tutor
+    - 1 time limit
+   
+test_4
+    - 1 student
+    - 1 group
+    - 2 tutors
+    - 1 time limit
+   
+test_5
+    - 1 student
+    - 1 group
+    - 10 tutors
+    - 1 time limit
+
+test_6
+    - 2 students
+    - 2 groups
+    - 1 tutor
+    - 1 time limit
+
+test_7
+    - 3 students
+    - 3 groups
+    - 3 tutors
+    - 1 time limit
+
+test_8
+    - 10 students
+    - 10 groups
+    - 10 tutors
+    - 1 time limit 
+  
+test_9
+    - 3 students
+    - 2 groups
+    - 1 tutor
+    - 1 time limit
+    
+test_10
+    - 6 students
+    - 2 groups
+    - 10 tutors
+    - 2 time limit
