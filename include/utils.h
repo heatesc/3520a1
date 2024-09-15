@@ -17,7 +17,7 @@
  * the program has executed correctly. For more information, see the
  * testing-related portion of part 2 of this assignment.
  */
-#define TEST_MODE (0)
+#define TEST_MODE (1)
 #define TEST_MODE_LOG_FILE "test_log.txt"
 // #define TEST_LOG(x) if (TEST_MODE) test_log(x);
 
