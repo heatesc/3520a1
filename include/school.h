@@ -37,9 +37,9 @@ typedef struct
     int* group_sizes;
     
     bool* lab_complete_flags;
-    pthread_mutex_t lab_complete_flag_muts;
+    pthread_mutex_t* lab_complete_flag_muts;
     // Used to indicate a lab session has finished.
-    pthread_cond_t lab_complete_conds;
+    pthread_cond_t* lab_complete_conds;
     
     // The teacher thread should set 'tutors_can_go_home' to true,
     // once all students have gone home.
@@ -52,7 +52,9 @@ typedef struct
     int student_counter;
     pthread_mutex_t student_counter_mut;
     pthread_cond_t all_students_at_school_cond;
-    
+
+    // group_assigned_to_lab_conds[i] is used to indicate that group i
+    // has been assigned to a lab.
     pthread_cond_t* group_assigned_to_lab_conds;
     
     // entering_group[i] stores the group currently entering or in lab i.
