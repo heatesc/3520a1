@@ -1,9 +1,6 @@
 #ifndef RING_BUF_H
 #define RING_BUF_H
 
-#include <stdio.h>
-#include "../include/utils.h"
-#include <malloc.h>
 #include <stdbool.h>
 
 typedef struct

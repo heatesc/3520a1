@@ -66,3 +66,47 @@ void mtsafe_printf(pthread_mutex_t* can_print_mut, char* str, ...)
     pthread_mutex_unlock(can_print_mut);
     va_end(argp);    
 }
+
+config* config_get()
+{
+    config* ret = malloc(sizeof(config));
+    
+    printf("Enter number of students, N: ");
+    if (get_int_from_stdin(&ret->N)) goto cleanup;
+    printf("Enter number of groups, M: ");
+    if (get_int_from_stdin(&ret->M)) goto cleanup;
+    printf("Enter number of tutors/labs, K: ");
+    if (get_int_from_stdin(&ret->K)) goto cleanup;
+    printf("Enter lab exercise time limit, T: ");
+    if (get_int_from_stdin(&ret->T)) goto cleanup;
+    
+    DEBUG_PRINT("Config retrieved. N=%d, M=%d, K=%d, T=%d\n", ret->N, ret->M, ret->K, ret->T);
+    printf("Config retrieved. N (student ct) =%d, M (group ct) =%d, K (lab i.e. tutor ct) =%d, (time bw T/2 and T) T=%d\n", N, M, K, T);
+
+    return ret;
+
+    cleanup:
+        free(ret);
+        return NULL;
+}
+
+// return 0 only if input config is valid
+int conf_check(config* conf)
+{
+    // each variable must be positive
+    if (conf->N < 0 || conf->M < 0 || conf->K < 0 || conf->T < 0)
+        return 1; 
+    
+    // there cannot be more groups than students
+    if (conf->M > conf->N) return 2;
+    
+    return 0;
+}
+
+int num_students_left(pthread_mutex_t* mut, int* source)
+{
+    pthread_mutex_lock(mut);
+    const int ret = *source;
+    pthread_mutex_unlock(mut);
+    return ret;
+}
