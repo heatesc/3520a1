@@ -6,7 +6,7 @@
 #include "ring_buf.h"
 #include "utils.h"
 
-typedef struct
+typedef struct school_t
 {
     // 'print_mut' is used to lock print access, ensuring thread safety.
     pthread_mutex_t print_mut;

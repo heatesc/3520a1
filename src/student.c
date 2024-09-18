@@ -11,7 +11,7 @@ void* student(void* args)
     int sid = *(int*)args;
 
     mtsafe_printf(&school->print_mut, "Student %d: I have arrived and wait for"
-        "being assigned to a group.\n", sid);
+        " being assigned to a group.\n", sid);
     
     /* increment the shared student_counter variable */
     
@@ -88,7 +88,8 @@ void* student(void* args)
    	/* signal the tutor if all students of the group are gone */ 
     
     pthread_mutex_lock(school->group_studs_gone_counter_muts + my_group);
-    if (++school->group_studs_gone_counter[my_group]) 
+    if (++school->group_studs_gone_counter[my_group] 
+        	== school->group_sizes[my_group]) 
 		pthread_cond_signal(school->group_gone_conds + my_group);
     pthread_mutex_unlock(school->group_studs_gone_counter_muts + my_group);
     

@@ -96,18 +96,19 @@ void* teacher(void* args)
                     avail_lab, group);
         school->entering_group[avail_lab] = group;
         // wake up the tutor/lab thread
-        pthread_mutex_unlock(school->entering_group_muts + avail_lab);
         pthread_cond_signal(school->entering_group_assigned_conds + avail_lab);
+        pthread_mutex_unlock(school->entering_group_muts + avail_lab);
         
         /* assign the retrieved available tutor to the current group */
         
         pthread_mutex_lock(school->lab_assignment_muts + group);
         school->lab_assignments[group] = avail_lab;
-        pthread_mutex_unlock(school->lab_assignment_muts + group);
-        
         // wake up students threads of the current lab
         pthread_cond_broadcast(school->group_assigned_to_lab_conds + group);
+        pthread_mutex_unlock(school->lab_assignment_muts + group);
     }
+    
+    /* wait for all studnets to go */
     
     pthread_mutex_lock(&school->students_gone_counter_mut);
         while (school->students_gone_counter < school->N)
@@ -129,6 +130,8 @@ void* teacher(void* args)
         pthread_cond_signal(school->entering_group_assigned_conds + tutor_id);
 		pthread_mutex_unlock(school->entering_group_muts + tutor_id);
 	}	
+        
+	/* indicate that all tutors may go home */
     
 	pthread_mutex_lock(&school->tutors_can_go_home_mut);
     school->tutors_can_go_home = true;
@@ -136,8 +139,6 @@ void* teacher(void* args)
 	pthread_mutex_unlock(&school->tutors_can_go_home_mut);
 
     /* wait for all tutors to go */
-
-    DEBUG_PRINT("Teacher thread is now waiting");
 
     pthread_mutex_lock(&school->tutors_gone_counter_mut);
     while (school->tutors_gone_counter < school->K)

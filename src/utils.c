@@ -5,9 +5,7 @@
 
 #include "../include/utils.h"
 
-
 #include <pthread.h>
-#include <bits/pthreadtypes.h>
 
 int parse_int(int* dest, char* src)
 {
@@ -82,9 +80,6 @@ config* config_get()
     if (get_int_from_stdin(&ret->T)) goto cleanup;
     
     DEBUG_PRINT("Config retrieved. N=%d, M=%d, K=%d, T=%d\n",
-        ret->N, ret->M, ret->K, ret->T);
-
-    printf("Config retrieved. N=%d, M=%d, K=%d, T=%d\n",
         ret->N, ret->M, ret->K, ret->T);
 
     return ret;

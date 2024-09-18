@@ -85,7 +85,7 @@ void* tutor(void* args)
             }
             pthread_mutex_unlock(school->lab_attendance_counter_muts + tid);
             
-            mtsafe_printf(&school->print_mut, "Tutor %d: All students in group" 
+            mtsafe_printf(&school->print_mut, "Tutor %d: All students in group " 
 				"%d have entered the lab room %d now.\n", 
 				tid, school->entering_group[tid], tid);
 
@@ -104,8 +104,6 @@ void* tutor(void* args)
             
             pthread_mutex_lock(school->lab_complete_flag_muts + 
                                school->entering_group[tid]);
-//            printf("tut %d: setting group %d's lab to complete\n", 
-//                   tid, school->entering_group[tid]);
             school->lab_complete_flags[school->entering_group[tid]] = true;
 			pthread_cond_broadcast(school->lab_complete_conds + 
                                    school->entering_group[tid]);
