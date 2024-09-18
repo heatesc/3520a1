@@ -24,15 +24,27 @@ bool ring_buf_empty(ring_buf* rb)
 
 bool ring_buf_full(ring_buf* rb)
 {
-    return rb->write_index == rb->read_index - 1;
+    return (rb->write_index + 1) % (rb->capacity + 1) == rb->read_index;
 }
 
 void ring_buf_add(ring_buf* rb, int x)
 {
-    if (!ring_buf_full(rb)) rb->arr[rb->write_index++] = x;
+    if (!ring_buf_full(rb))
+    {
+        rb->arr[rb->write_index] = x;
+        rb->write_index = (rb->write_index + 1) % (rb->capacity + 1);
+    }
 }
 
 int ring_buf_remove(ring_buf* rb)
 {
-    return rb->arr[rb->read_index++]; 
+    int ret = rb->arr[rb->read_index];
+    rb->read_index = (rb->read_index + 1) % (rb->capacity + 1);
+    return ret;
+}
+
+void ring_buf_destroy(ring_buf* rb)
+{
+    free(rb->arr);
+    free(rb);
 }

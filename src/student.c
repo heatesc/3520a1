@@ -3,92 +3,98 @@
 
 #include <stdio.h>
 
+extern school_t* school;
 
 void* student(void* args)
 {
-    student_args* sargs = (student_args*)args;
+    int sid = *(int*)args;
 
-    printf("Student %d: I have arrived and wait for being assigned to a group."
-           "\n", sargs->student_id);
+    mtsafe_printf(&school->print_mut, "Student %d: I have arrived and wait for"
+        "being assigned to a group.\n", sid);
     
     /* increment the shared student_counter variable */
     
-    pthread_mutex_lock(sargs->student_counter_mut);
-    (*sargs->student_counter)++; 
-    pthread_mutex_unlock(sargs->student_counter_mut);
+    pthread_mutex_lock(&school->student_counter_mut);
+    school->student_counter++; 
+    pthread_mutex_unlock(&school->student_counter_mut);
     
-    // signal for teacher to know when all students have arrived.
-    if (sargs->N == *sargs->student_counter)
-        pthread_cond_signal(sargs->all_students_arrived);
+    /* signal teacher if all students have arrived */ 
+    
+    if (school->N == school->student_counter)
+        pthread_cond_signal(&school->all_students_at_school_cond);
 
-    DEBUG_PRINT("line %d reached\n", __LINE__);
+    /* wait until assigned to a group */ 
     
+    pthread_mutex_lock(school->stud_group_assignment_muts + sid);
+    while (GROUP_UNASSIGNED == school->stud_group_assignments[sid])
+        pthread_cond_wait(school->stud_assigned_group_conds + sid, 
+                          school->stud_group_assignment_muts + sid);
+    pthread_mutex_unlock(school->stud_group_assignment_muts + sid);
+    // This student will never be assigned to a different group, so 
+    // for convenience we store the group in the local variable 'my_group'.
+    int my_group = school->stud_group_assignments[sid];
     
-    pthread_mutex_lock(&sargs->assigned_group_mut);
-    while (GROUP_UNASSIGNED == sargs->assigned_group)
-        pthread_cond_wait(&sargs->assigned_group_cond, 
-                          &sargs->assigned_group_mut);
-    
-    pthread_mutex_unlock(&sargs->assigned_group_mut);
+    /* wait until assigned a lab */
 
-    pthread_mutex_lock(&sargs->lab_assignment_muts[sargs->assigned_group]);
-    DEBUG_PRINT("stu %d in group %d, assgined lab: %d\n", sargs->student_id,
-                sargs->assigned_group, sargs->lab_assignments[sargs->assigned_group]);
-    while (LAB_UNASSIGNED == sargs->lab_assignments[sargs->assigned_group])
+    pthread_mutex_lock(school->lab_assignment_muts + my_group);
+    while (LAB_UNASSIGNED == school->lab_assignments[my_group])
     {
-        mtsafe_printf(sargs->print_mut, "Student %d: OK, I'm in group %d and waiting for my turn to enter a "
-           "lab room\n", sargs->student_id, sargs->assigned_group);
+        mtsafe_printf(&school->print_mut, "Student %d: OK, I'm in group %d "
+            "and waiting for my turn to enter a lab room\n", sid, my_group);
         DEBUG_PRINT("stu %d in group %d: waiting to be assigned to lab\n", 
-                    sargs->student_id, sargs->assigned_group);
-        pthread_cond_wait(&sargs->group_assigned_to_lab_conds[sargs->assigned_group], 
-                          &sargs->lab_assignment_muts[sargs->assigned_group]);
-        DEBUG_PRINT("stu %d in group %d: assigned to lab %d\n", sargs->student_id,
-                    sargs->assigned_group, sargs->lab_assignments[sargs->assigned_group]);
+            sid, my_group);
+        pthread_cond_wait(school->group_assigned_to_lab_conds + my_group, 
+                          school->lab_assignment_muts + my_group);
+        DEBUG_PRINT("stu %d in group %d: assigned to lab %d\n", sid,
+                    my_group, school->lab_assignments[my_group]);
     }
-    pthread_mutex_unlock(&sargs->lab_assignment_muts[sargs->assigned_group]);
+    pthread_mutex_unlock(school->lab_assignment_muts + my_group);
+    // This student's group will never be assigned to a different lab, so
+    // for convenience we store the lab in the local variable 'my_lab'.
+    int my_lab = school->lab_assignments[my_group];
     
-    mtsafe_printf(sargs->print_mut, "Student %d in group %d: My group is called. I will enter the lab"
-           " room %d\n", sargs->student_id, sargs->assigned_group, 
-           sargs->lab_assignments[sargs->assigned_group]);
+    mtsafe_printf(&school->print_mut, "Student %d in group %d: My group "
+        "is called. I will enter the lab room %d\n", sid, my_group, my_lab);
 
-    DEBUG_PRINT("line %d reached\n", __LINE__);
+    /* signal the tutor if all students have arrived */ 
+    
     bool signal_all_stud_present = false;
-    DEBUG_PRINT("stu: BEFORE pointer to lab attendance ctr mut: %p\n", &sargs->lab_attendance_counter_mut[sargs->lab_assignments[sargs->assigned_group]]);
-    pthread_mutex_lock(&sargs->lab_attendance_counter_muts[sargs->lab_assignments[sargs->assigned_group]]);
-    DEBUG_PRINT("counter before increment: %d\n", sargs->lab_attendance_counters[sargs->lab_assignments[sargs->assigned_group]]);
-    (sargs->lab_attendance_counters[sargs->lab_assignments[sargs->assigned_group]])++;
-    DEBUG_PRINT("counter after increment: %d\n", sargs->lab_attendance_counters[sargs->lab_assignments[sargs->assigned_group]]);
-    signal_all_stud_present = sargs->lab_attendance_counters[sargs->lab_assignments[sargs->assigned_group]] >= sargs->group_sizes[sargs->assigned_group];
-    pthread_mutex_unlock(&sargs->lab_attendance_counter_muts[sargs->lab_assignments[sargs->assigned_group]]);
+    pthread_mutex_lock(school->lab_attendance_counter_muts + my_lab);
+    (school->lab_attendance_counters[my_lab])++;
+    signal_all_stud_present = school->lab_attendance_counters[my_lab] 
+                              >= school->group_sizes[my_group];
+    pthread_mutex_unlock(school->lab_attendance_counter_muts + my_lab);
     
     if (signal_all_stud_present)
     {
-        DEBUG_PRINT("student %d: signal for all students present called\n", sargs->student_id);
-        pthread_cond_signal(&sargs->all_students_present_conds[sargs->lab_assignments[sargs->assigned_group]]);
+        DEBUG_PRINT("student %d: signal for all students present called\n", sid);
+        pthread_cond_signal(school->all_students_present_conds + my_lab);
     }
 
     /* wait for the tutor to broadcast that the lab is completed */
     
-    pthread_mutex_lock(&sargs->lab_complete_flag_muts[sargs->lab_assignments[sargs->assigned_group]]);
-    while (!sargs->lab_complete_flags[sargs->lab_assignments[sargs->assigned_group]])
-        pthread_cond_wait(sargs->lab_complete_conds + sargs->lab_assignments[sargs->assigned_group],
-            &sargs->lab_complete_flag_muts[sargs->lab_assignments[sargs->assigned_group]]);
-    pthread_mutex_unlock(&sargs->lab_complete_flag_muts[sargs->lab_assignments[sargs->assigned_group]]);
+    pthread_mutex_lock(school->lab_complete_flag_muts + my_group);
+    int iter = 0;
+    while (!school->lab_complete_flags[my_group])
+    {
+      	printf("stu: %d, iter %d\n", sid, iter);
+        pthread_cond_wait(school->lab_complete_conds + my_group,
+            school->lab_complete_flag_muts + my_group);  
+//        printf("stu: %d: spurious wake OR tutor signalled lab complete\n", sid);
+//        printf("stu: %d: labcompl flag = %d\n", sid, (int)school->lab_complete_flags[my_group]);
+    }
+//    printf("stu: %d: attempting to unlock now\n", sid);
+    pthread_mutex_unlock(school->lab_complete_flag_muts + my_group);
     
-    mtsafe_printf(sargs->print_mut, "Student %d in group %d: Thanks Tutor %d. Bye!\n", sargs->student_id,
-           sargs->assigned_group, 
-           sargs->lab_assignments[sargs->assigned_group]);
+    mtsafe_printf(&school->print_mut, "Student %d in group %d: Thanks Tutor %d."
+                                      " Bye!\n", sid, my_group, my_lab);
     
-    /* update the shared students gone counter */
-
-    pthread_mutex_lock(&sargs->students_gone_counter_mut);
-    (*sargs->students_gone_counter)++;
-    pthread_mutex_unlock(&sargs->students_gone_counter_mut);
-
-    /* inform the teacher if this is the last student */
+   	/* signal the tutor if all students of the group are gone */ 
     
-    if ((*sargs->students_gone_counter >= sargs->N))
-        pthread_cond_signal(sargs->students_gone_cond);
+    pthread_mutex_lock(school->group_studs_gone_counter_muts + my_group);
+    if (++school->group_studs_gone_counter[my_group]) 
+		pthread_cond_signal(school->group_gone_conds + my_group);
+    pthread_mutex_unlock(school->group_studs_gone_counter_muts + my_group);
     
     return NULL;
 }

@@ -25,6 +25,7 @@
 #define MAX_INT_DIGITS (10)
 #define GROUP_UNASSIGNED (-1)
 #define LAB_UNASSIGNED (-1)
+#define GROUP_UNAVAILABLE (-2) // this represents no groups left
 
 typedef struct
 {

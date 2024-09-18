@@ -21,4 +21,6 @@ void ring_buf_add(ring_buf* rb, int x);
 
 int ring_buf_remove(ring_buf* rb);
 
+void ring_buf_destroy(ring_buf* rb);
+
 #endif // RING_BUF_H

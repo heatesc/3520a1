@@ -1,6 +1,6 @@
 cc = gcc
 cflags = -std=c11 -g -pthread -Wall -Wextra
-src = src/main.c src/utils.c src/ring_buf.c src/teacher.c src/student.c src/tutor.c src/school.h
+src = src/main.c src/utils.c src/ring_buf.c src/teacher.c src/student.c src/tutor.c src/school.c
 obj = $(src:.c=.o)
 target = glab
 

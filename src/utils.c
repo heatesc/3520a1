@@ -80,8 +80,11 @@ config* config_get()
     printf("Enter lab exercise time limit, T: ");
     if (get_int_from_stdin(&ret->T)) goto cleanup;
     
-    DEBUG_PRINT("Config retrieved. N=%d, M=%d, K=%d, T=%d\n", ret->N, ret->M, ret->K, ret->T);
-    printf("Config retrieved. N (student ct) =%d, M (group ct) =%d, K (lab i.e. tutor ct) =%d, (time bw T/2 and T) T=%d\n", N, M, K, T);
+    DEBUG_PRINT("Config retrieved. N=%d, M=%d, K=%d, T=%d\n",
+        ret->N, ret->M, ret->K, ret->T);
+
+    printf("Config retrieved. N=%d, M=%d, K=%d, T=%d\n",
+        ret->N, ret->M, ret->K, ret->T);
 
     return ret;
 
