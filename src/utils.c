@@ -29,9 +29,10 @@ void strip_newline(char* s)
         s[strlen(s) - 1] = '\0';
 }
 
+// reference: https://stackoverflow.com/questions/29381843/generate-random-number-in-range-min-max
 int get_rand_num(int min, int max)
 {
-    return min + rand() % (max - min + 1);
+    return min + rand() % (max + 1 - min);
 }
 
 // returns 0 only if success
@@ -97,7 +98,7 @@ config* config_get()
 int conf_check(config* conf)
 {
     // each variable must be positive
-    if (conf->N < 0 || conf->M < 0 || conf->K < 0 || conf->T < 0)
+    if (conf->N <= 0 || conf->M <= 0 || conf->K <= 0 || conf->T <= 0)
         return 1; 
     
     // there cannot be more groups than students

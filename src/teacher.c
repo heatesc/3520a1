@@ -54,10 +54,10 @@ void* teacher(void* args)
             if (stud_left_to_fill_group[new_group] > 0)
                 found_group_with_space = true;
         }
-//        pthread_mutex_lock(school->stud_group_assignment_muts + i);
+        pthread_mutex_lock(school->stud_group_assignment_muts + i);
         school->stud_group_assignments[i] = new_group;
         pthread_cond_signal(school->stud_assigned_group_conds + i);
-//        pthread_mutex_unlock(school->stud_group_assignment_muts + i);
+        pthread_mutex_unlock(school->stud_group_assignment_muts + i);
         mtsafe_printf(&school->print_mut, "Teacher: student %d is in group "
                                               "%d.\n", i, new_group);
         stud_left_to_fill_group[new_group]--;

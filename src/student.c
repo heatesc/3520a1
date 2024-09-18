@@ -1,5 +1,6 @@
 #include "../include/utils.h"
 #include "../include/student.h"
+#include "../include/school.h"
 
 #include <stdio.h>
 
@@ -74,16 +75,11 @@ void* student(void* args)
     /* wait for the tutor to broadcast that the lab is completed */
     
     pthread_mutex_lock(school->lab_complete_flag_muts + my_group);
-    int iter = 0;
     while (!school->lab_complete_flags[my_group])
     {
-      	printf("stu: %d, iter %d\n", sid, iter);
         pthread_cond_wait(school->lab_complete_conds + my_group,
             school->lab_complete_flag_muts + my_group);  
-//        printf("stu: %d: spurious wake OR tutor signalled lab complete\n", sid);
-//        printf("stu: %d: labcompl flag = %d\n", sid, (int)school->lab_complete_flags[my_group]);
     }
-//    printf("stu: %d: attempting to unlock now\n", sid);
     pthread_mutex_unlock(school->lab_complete_flag_muts + my_group);
     
     mtsafe_printf(&school->print_mut, "Student %d in group %d: Thanks Tutor %d."
